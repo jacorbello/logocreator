@@ -4,14 +4,20 @@ import { Redis } from "@upstash/redis";
 import dedent from "dedent";
 import Together from "together-ai";
 import { z } from "zod";
+import { DEFAULT_FLAGS, parseFeatureFlagEnvVar } from "@/app/lib/feature-flags";
 
 let ratelimit: Ratelimit | undefined;
 
 export async function POST(req: Request) {
-  const user = await currentUser();
-
-  if (!user) {
-    return new Response("", { status: 404 });
+  const featureFlags = { ...DEFAULT_FLAGS, ...parseFeatureFlagEnvVar() };
+  const authEnabled = featureFlags.AUTH.enabled;
+  
+  let user = null;
+  if (authEnabled) {
+    user = await currentUser();
+    if (!user) {
+      return new Response("", { status: 404 });
+    }
   }
 
   const json = await req.json();
@@ -19,7 +25,6 @@ export async function POST(req: Request) {
     .object({
       userAPIKey: z.string().optional(),
       companyName: z.string(),
-      // selectedLayout: z.string(),
       selectedStyle: z.string(),
       selectedPrimaryColor: z.string(),
       selectedBackgroundColor: z.string(),
@@ -38,7 +43,7 @@ export async function POST(req: Request) {
   }
 
   // Add rate limiting if Upstash API keys are set & no BYOK, otherwise skip
-  if (process.env.UPSTASH_REDIS_REST_URL && !data.userAPIKey) {
+  if (process.env.UPSTASH_REDIS_REST_URL && !data.userAPIKey && authEnabled) {
     ratelimit = new Ratelimit({
       redis: Redis.fromEnv(),
       // Allow 3 requests per 2 months on prod
@@ -52,21 +57,25 @@ export async function POST(req: Request) {
 
   if (data.userAPIKey) {
     client.apiKey = data.userAPIKey;
-    (await clerkClient()).users.updateUserMetadata(user.id, {
-      unsafeMetadata: {
-        remaining: "BYOK",
-      },
-    });
+    if (authEnabled && user) {
+      (await clerkClient()).users.updateUserMetadata(user.id, {
+        unsafeMetadata: {
+          remaining: "BYOK",
+        },
+      });
+    }
   }
 
-  if (ratelimit) {
+  if (ratelimit && user) {
     const identifier = user.id;
     const { success, remaining } = await ratelimit.limit(identifier);
-    (await clerkClient()).users.updateUserMetadata(user.id, {
-      unsafeMetadata: {
-        remaining,
-      },
-    });
+    if (authEnabled) {
+      (await clerkClient()).users.updateUserMetadata(user.id, {
+        unsafeMetadata: {
+          remaining,
+        },
+      });
+    }
 
     if (!success) {
       return new Response(
