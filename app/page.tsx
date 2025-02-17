@@ -3,26 +3,27 @@
 import Spinner from "@/app/components/Spinner";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { motion } from "framer-motion";
 import { Textarea } from "@/app/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { SignInButton, useUser } from "@clerk/nextjs";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
-import { domain } from "@/app/lib/domain";
 import InfoTooltip from "./components/InfoToolTip";
+import { useFeatureFlags } from "./contexts/FeatureFlagContext";
+import dynamic from 'next/dynamic';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@radix-ui/react-popover";
+
+const ClerkAuthComponents = dynamic(
+  () => import('@/app/components/auth/ClerkAuthPage'),
+  { ssr: false }
+);
 
 // const layouts = [
 //   { name: "Solo", icon: "/solo.svg" },
@@ -53,6 +54,8 @@ const backgroundColors = [
 ];
 
 export default function Page() {
+  const { isEnabled } = useFeatureFlags();
+  const isAuthEnabled = isEnabled('AUTH');
   const [userAPIKey, setUserAPIKey] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("userAPIKey") || "";
@@ -68,11 +71,16 @@ export default function Page() {
   const [selectedBackgroundColor, setSelectedBackgroundColor] = useState(
     backgroundColors[0].name,
   );
+  const [customPrimaryColor, setCustomPrimaryColor] = useState("#0F6FFF");
+  const [customBackgroundColor, setCustomBackgroundColor] = useState("#FFFFFF");
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [generatedImage, setGeneratedImage] = useState("");
 
-  const { isSignedIn, isLoaded, user } = useUser();
+  // Only use Clerk hooks if auth is enabled
+  const authState = isAuthEnabled
+    ? { isSignedIn: false, isLoaded: true, user: null }
+    : { isSignedIn: true, isLoaded: true, user: null };
 
   const handleAPIKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
@@ -80,8 +88,30 @@ export default function Page() {
     localStorage.setItem("userAPIKey", newValue);
   };
 
+  const handlePrimaryColorSelect = (color: string) => {
+    setSelectedPrimaryColor(color);
+    if (color === "Custom") {
+      return;
+    }
+    const selectedColor = primaryColors.find((c) => c.name === color);
+    if (selectedColor) {
+      setCustomPrimaryColor(selectedColor.color);
+    }
+  };
+
+  const handleBackgroundColorSelect = (color: string) => {
+    setSelectedBackgroundColor(color);
+    if (color === "Custom") {
+      return;
+    }
+    const selectedColor = backgroundColors.find((c) => c.name === color);
+    if (selectedColor) {
+      setCustomBackgroundColor(selectedColor.color);
+    }
+  };
+
   async function generateLogo() {
-    if (!isSignedIn) {
+    if (isAuthEnabled && !authState.isSignedIn) {
       return;
     }
 
@@ -92,10 +122,9 @@ export default function Page() {
       body: JSON.stringify({
         userAPIKey,
         companyName,
-        // selectedLayout,
         selectedStyle,
-        selectedPrimaryColor,
-        selectedBackgroundColor,
+        selectedPrimaryColor: selectedPrimaryColor === "Custom" ? customPrimaryColor : primaryColors.find(c => c.name === selectedPrimaryColor)?.color,
+        selectedBackgroundColor: selectedBackgroundColor === "Custom" ? customBackgroundColor : backgroundColors.find(c => c.name === selectedBackgroundColor)?.color,
         additionalInfo,
       }),
     });
@@ -103,7 +132,6 @@ export default function Page() {
     if (res.ok) {
       const json = await res.json();
       setGeneratedImage(`data:image/png;base64,${json.b64_json}`);
-      await user.reload();
     } else if (res.headers.get("Content-Type") === "text/plain") {
       toast({
         variant: "destructive",
@@ -135,7 +163,7 @@ export default function Page() {
             }}
             className="flex h-full w-full flex-col"
           >
-            <fieldset className="flex grow flex-col" disabled={!isSignedIn}>
+            <fieldset className="flex grow flex-col" disabled={isAuthEnabled && !authState.isSignedIn}>
               <div className="flex-grow overflow-y-auto">
                 <div className="px-8 pb-0 pt-4 md:px-6 md:pt-6">
                   {/* API Key Section */}
@@ -235,57 +263,115 @@ export default function Page() {
                       <label className="mb-1 block text-xs font-bold uppercase text-[#6F6F6F]">
                         Primary
                       </label>
-                      <Select
-                        value={selectedPrimaryColor}
-                        onValueChange={setSelectedPrimaryColor}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a fruit" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                            style={{
+                              backgroundColor: selectedPrimaryColor === "Custom" ? customPrimaryColor : primaryColors.find(c => c.name === selectedPrimaryColor)?.color
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="size-4 rounded-sm border border-gray-200"
+                                style={{
+                                  backgroundColor: selectedPrimaryColor === "Custom" ? customPrimaryColor : primaryColors.find(c => c.name === selectedPrimaryColor)?.color
+                                }}
+                              />
+                              {selectedPrimaryColor}
+                            </div>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="z-50 w-full bg-[#2C2C2C] p-3" side="right">
+                          <div className="mb-2">
+                            <input
+                              type="color"
+                              value={customPrimaryColor}
+                              onChange={(e) => {
+                                setCustomPrimaryColor(e.target.value);
+                                setSelectedPrimaryColor("Custom");
+                              }}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-1">
                             {primaryColors.map((color) => (
-                              <SelectItem key={color.color} value={color.name}>
-                                <span className="flex items-center">
-                                  <span
+                              <Button
+                                key={color.name}
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => handlePrimaryColorSelect(color.name)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="size-4 rounded-sm border border-gray-200"
                                     style={{ backgroundColor: color.color }}
-                                    className="mr-2 size-4 rounded-sm bg-white"
                                   />
                                   {color.name}
-                                </span>
-                              </SelectItem>
+                                </div>
+                              </Button>
                             ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                     <div className="flex-1">
                       <label className="mb-1 block items-center text-xs font-bold uppercase text-[#6F6F6F]">
                         Background
                       </label>
-                      <Select
-                        value={selectedBackgroundColor}
-                        onValueChange={setSelectedBackgroundColor}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a fruit" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                            style={{
+                              backgroundColor: selectedBackgroundColor === "Custom" ? customBackgroundColor : backgroundColors.find(c => c.name === selectedBackgroundColor)?.color
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="size-4 rounded-sm border border-gray-200"
+                                style={{
+                                  backgroundColor: selectedBackgroundColor === "Custom" ? customBackgroundColor : backgroundColors.find(c => c.name === selectedBackgroundColor)?.color
+                                }}
+                              />
+                              {selectedBackgroundColor}
+                            </div>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="z-50 w-full bg-[#2C2C2C] p-3" side="right">
+                          <div className="mb-2">
+                            <input
+                              type="color"
+                              value={customBackgroundColor}
+                              onChange={(e) => {
+                                setCustomBackgroundColor(e.target.value);
+                                setSelectedBackgroundColor("Custom");
+                              }}
+                              className="w-full"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-1">
                             {backgroundColors.map((color) => (
-                              <SelectItem key={color.color} value={color.name}>
-                                <span className="flex items-center">
-                                  <span
+                              <Button
+                                key={color.name}
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => handleBackgroundColorSelect(color.name)}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="size-4 rounded-sm border border-gray-200"
                                     style={{ backgroundColor: color.color }}
-                                    className="mr-2 size-4 rounded-sm bg-white"
                                   />
                                   {color.name}
-                                </span>
-                              </SelectItem>
+                                </div>
+                              </Button>
                             ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </div>
                   {/* Additional Options Section */}
@@ -333,35 +419,7 @@ export default function Page() {
             </fieldset>
           </form>
 
-          {isLoaded && !isSignedIn && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 px-6"
-            >
-              <div className="rounded bg-gray-200 p-4 text-gray-900">
-                <p className="text-lg">
-                  Create a free account to start making logos:
-                </p>
-
-                <div className="mt-4">
-                  <SignInButton
-                    mode="modal"
-                    signUpForceRedirectUrl={domain}
-                    forceRedirectUrl={domain}
-                  >
-                    <Button
-                      size="lg"
-                      className="w-full text-base font-semibold"
-                      variant="secondary"
-                    >
-                      Sign in
-                    </Button>
-                  </SignInButton>
-                </div>
-              </div>
-            </motion.div>
-          )}
+          {isAuthEnabled && <ClerkAuthComponents />}
         </div>
 
         <div className="flex w-full flex-col pt-12 md:pt-0">
