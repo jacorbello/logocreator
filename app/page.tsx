@@ -14,11 +14,13 @@ import Footer from "./components/Footer";
 import InfoTooltip from "./components/InfoToolTip";
 import { useFeatureFlags } from "./contexts/FeatureFlagContext";
 import dynamic from 'next/dynamic';
+import ModelSelector from "./components/ModelSelector";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@radix-ui/react-popover";
+import { models } from "@/app/constants/models";
 
 const ClerkAuthComponents = dynamic(
   () => import('@/app/components/auth/ClerkAuthPage'),
@@ -63,6 +65,7 @@ export default function Page() {
     return "";
   });
   const [companyName, setCompanyName] = useState("");
+  const [selectedModel, setSelectedModel] = useState("black-forest-labs/FLUX.1.1-pro");
   // const [selectedLayout, setSelectedLayout] = useState(layouts[0].name);
   const [selectedStyle, setSelectedStyle] = useState(logoStyles[0].name);
   const [selectedPrimaryColor, setSelectedPrimaryColor] = useState(
@@ -76,6 +79,8 @@ export default function Page() {
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [generatedImage, setGeneratedImage] = useState("");
+  const [referenceImage, setReferenceImage] = useState<string | null>(null);
+  const selectedModelInfo = models.find(m => m.modelString === selectedModel);
 
   // Only use Clerk hooks if auth is enabled
   const authState = isAuthEnabled
@@ -123,9 +128,11 @@ export default function Page() {
         userAPIKey,
         companyName,
         selectedStyle,
+        selectedModel,
         selectedPrimaryColor: selectedPrimaryColor === "Custom" ? customPrimaryColor : primaryColors.find(c => c.name === selectedPrimaryColor)?.color,
         selectedBackgroundColor: selectedBackgroundColor === "Custom" ? customBackgroundColor : backgroundColors.find(c => c.name === selectedBackgroundColor)?.color,
         additionalInfo,
+        referenceImage: selectedModelInfo?.requiresReferenceImage ? referenceImage : undefined,
       }),
     });
 
@@ -148,6 +155,20 @@ export default function Page() {
 
     setIsLoading(false);
   }
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        // Get just the base64 data without the data:image prefix
+        const base64Data = base64.split(',')[1];
+        setReferenceImage(base64Data);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   return (
     <div className="flex h-screen flex-col overflow-y-auto overflow-x-hidden bg-[#343434] md:flex-row">
@@ -393,6 +414,48 @@ export default function Page() {
                       </div>
                     </div>
                   </div>
+                  {/* Model Selection Section */}
+                  <div className="mb-6">
+                    <label className="mb-2 flex items-center text-xs font-bold uppercase text-[#6F6F6F]">
+                      MODEL
+                      <InfoTooltip content="Choose the AI model to generate your logo" />
+                    </label>
+                    <ModelSelector
+                      selectedModel={selectedModel}
+                      onModelChange={(model) => {
+                        setSelectedModel(model);
+                        setReferenceImage(null);
+                      }}
+                    />
+                  </div>
+
+                  {selectedModelInfo?.requiresReferenceImage && (
+                    <div className="mb-6">
+                      <label className="mb-2 flex items-center text-xs font-bold uppercase text-[#6F6F6F]">
+                        Reference Image
+                        <InfoTooltip content="Upload a reference image for the model to use" />
+                      </label>
+                      <div className="flex gap-2">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          required
+                          className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-gray-700 file:text-white hover:file:bg-gray-600"
+                        />
+                        {referenceImage && (
+                          <div className="w-12 h-12 rounded overflow-hidden">
+                            { /* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`data:image/png;base64,${referenceImage}`}
+                              alt="Reference"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="px-8 py-4 md:px-6 md:py-6">
@@ -473,6 +536,6 @@ export default function Page() {
           <Footer />
         </div>
       </div>
-    </div>
+    </div >
   );
 }
