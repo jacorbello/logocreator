@@ -169,9 +169,6 @@ export async function POST(req: Request) {
     });
     return Response.json(response.data[0], { status: 200 });
   } catch (error) {
-    console.error('*'.repeat(80));
-    console.error('Error generating logo:', error);
-    console.error('*'.repeat(80));
     const invalidApiKey = z
       .object({
         error: z.object({
