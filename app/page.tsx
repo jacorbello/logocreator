@@ -9,18 +9,19 @@ import * as RadioGroup from "@radix-ui/react-radio-group";
 import { DownloadIcon, RefreshCwIcon } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
-import Header from "./components/Header";
-import Footer from "./components/Footer";
-import InfoTooltip from "./components/InfoToolTip";
-import { useFeatureFlags } from "./contexts/FeatureFlagContext";
+import Header from "@/app/components/Header";
+import Footer from "@/app/components/Footer";
+import InfoTooltip from "@/app/components/InfoToolTip";
+import { useFeatureFlags } from "@/app/contexts/FeatureFlagContext";
 import dynamic from 'next/dynamic';
-import ModelSelector from "./components/ModelSelector";
+import ModelSelector from "@/app/components/ModelSelector";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@radix-ui/react-popover";
 import { models } from "@/app/constants/models";
+import { isLightColor } from "@/app/lib/color";
 
 const ClerkAuthComponents = dynamic(
   () => import('@/app/components/auth/ClerkAuthPage'),
@@ -54,6 +55,8 @@ const backgroundColors = [
   { name: "Gray", color: "#CCCCCC" },
   { name: "Black", color: "#000000" },
 ];
+
+
 
 export default function Page() {
   const { isEnabled } = useFeatureFlags();
@@ -290,7 +293,10 @@ export default function Page() {
                             variant="outline"
                             className="w-full justify-between"
                             style={{
-                              backgroundColor: selectedPrimaryColor === "Custom" ? customPrimaryColor : primaryColors.find(c => c.name === selectedPrimaryColor)?.color
+                              backgroundColor: selectedPrimaryColor === "Custom" ? customPrimaryColor : primaryColors.find(c => c.name === selectedPrimaryColor)?.color,
+                              color: selectedPrimaryColor === "Custom" ?
+                                (isLightColor(customPrimaryColor) ? 'black' : 'white') :
+                                (isLightColor(primaryColors.find(c => c.name === selectedPrimaryColor)?.color || '') ? 'black' : 'white')
                             }}
                           >
                             <div className="flex items-center gap-2">
@@ -347,7 +353,10 @@ export default function Page() {
                             variant="outline"
                             className="w-full justify-between"
                             style={{
-                              backgroundColor: selectedBackgroundColor === "Custom" ? customBackgroundColor : backgroundColors.find(c => c.name === selectedBackgroundColor)?.color
+                              backgroundColor: selectedBackgroundColor === "Custom" ? customBackgroundColor : backgroundColors.find(c => c.name === selectedBackgroundColor)?.color,
+                              color: selectedBackgroundColor === "Custom" ?
+                                (isLightColor(customBackgroundColor) ? 'black' : 'white') :
+                                (isLightColor(backgroundColors.find(c => c.name === selectedBackgroundColor)?.color || '') ? 'black' : 'white')
                             }}
                           >
                             <div className="flex items-center gap-2">
